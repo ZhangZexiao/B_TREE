@@ -23,9 +23,6 @@ struct B_TREE_NODE
 		delete[] values;
 		delete[] sbs;
 	}
-	//B_TREE_NODE<key, value> &operator=(const B_TREE_NODE<key, value> &)
-	//{
-	//}
 private:
 	B_TREE_NODE()
 	{
@@ -60,11 +57,16 @@ public:
 			this->splitNode(this->root, 0);
 		}
 		this->insertNonFullNode(this->root, k, v);
-		this->printTree(this->root);
+		this->printTree();
 	}
 	value Search(key k)
 	{
+		this->printTree();
 		return this->searchKey(this->root, k);
+	}
+	void Delete(key k)
+	{
+		return this->deleteKey(this->root, k);
 	}
 private:
 	value searchKey(B_TREE_NODE<key, value> *node, key k)
@@ -173,6 +175,152 @@ private:
 			this->insertNonFullNode(node->sbs[i], k, v);
 		}
 	}
+	void mergeNode(B_TREE_NODE<key, value> *&node, int mid)
+	{
+		auto leftChild = node->sbs[mid], rightChild = node->sbs[mid + 1];
+		auto nLeft = node->sbs[mid]->n;
+		// parent to left child
+		leftChild->keys[nLeft] = node->keys[mid];
+		leftChild->values[nLeft] = node->values[mid];
+		nLeft++;
+		auto nRight = 0;
+		// right child to left child
+		while (nRight < rightChild->n)
+		{
+			leftChild->keys[nLeft] = rightChild->keys[nRight];
+			leftChild->values[nLeft] = rightChild->values[nRight];
+			// fix bug, it should be "nLeft + 1", not "nLeft".
+			// revert fixing, it should be "nLeft".
+			leftChild->sbs[nLeft] = rightChild->sbs[nRight];
+			nRight++;
+			nLeft++;
+		}
+		// fix bug, it should be "nLeft + 1", not "nLeft".
+		// revert fixing, it should be "nLeft".
+		leftChild->sbs[nLeft] = rightChild->sbs[nRight];
+		leftChild->n += (1 + rightChild->n);
+		delete rightChild;
+		// move parent
+		auto nParent = mid;
+		while (nParent < node->n - 1)
+		{
+			node->keys[nParent] = node->keys[nParent + 1];
+			node->values[nParent] = node->values[nParent + 1];
+			node->sbs[nParent + 1] = node->sbs[nParent + 2];
+		}
+		node->n--;
+		if (node->n == 0 && !node->isLeaf)
+		{
+			delete this->root;
+			this->root = leftChild;
+			node = leftChild;
+		}
+	}
+	void deleteKey(B_TREE_NODE<key, value> *node, key k)
+	{
+		std::cout << "delete key " << k << std::endl;
+		this->printTree();
+		int i = 0;
+		// i stop at keys[i] = k or keys[i] > k or i == node->n
+		while (i < node->n && node->keys[i] < k)
+		{
+			i++;
+		}
+		if (i < node->n && node->keys[i] == k)
+		{
+			if (node->isLeaf)
+			{
+				// max i = n - 2, so the last assignment is node->keys[n - 2] = node->keys[n - 1];
+				while (i < node->n - 1)
+				{
+					node->keys[i] = node->keys[i + 1];
+					node->values[i] = node->values[i + 1];
+				}
+				node->n--;
+				// fix bug, it should return or will not go into following code blocks. so add "return;" and "else" before the follwing first "if".
+				return;
+			}
+			else if (node->sbs[i]->n >= this->minimalDegree)
+			{
+				node->keys[i] = node->sbs[i]->keys[node->sbs[i]->n - 1];
+				node->values[i] = node->sbs[i]->values[node->sbs[i]->n - 1];
+				return this->deleteKey(node->sbs[i], node->sbs[i]->keys[node->sbs[i]->n - 1]);
+			}
+			else if (node->sbs[i + 1]->n >= this->minimalDegree)
+			{
+				node->keys[i] = node->sbs[i + 1]->keys[0];
+				node->values[i] = node->sbs[i + 1]->values[0];
+				return this->deleteKey(node->sbs[i + 1], node->sbs[i + 1]->keys[0]);
+			}
+			else
+			{
+				this->mergeNode(node, i);
+				return this->deleteKey(node, k);
+			}
+		}
+		else if (node->sbs[i]->n >= this->minimalDegree)
+		{
+			return this->deleteKey(node->sbs[i], k);
+		}
+		else
+		{
+			// left node
+			if (i > 0 && node->sbs[i - 1]->n >= this->minimalDegree)
+			{
+				auto mid = i - 1;
+				// change i node
+				int nRight = node->sbs[mid + 1]->n;
+				while (nRight > 0)
+				{
+					node->sbs[mid + 1]->keys[nRight] = node->sbs[mid + 1]->keys[nRight - 1];
+					node->sbs[mid + 1]->values[nRight] = node->sbs[mid + 1]->values[nRight - 1];
+					node->sbs[mid + 1]->sbs[nRight + 1] = node->sbs[mid + 1]->sbs[nRight];
+					nRight--;
+				}
+				node->sbs[mid + 1]->sbs[nRight + 1] = node->sbs[mid + 1]->sbs[nRight];
+				node->sbs[mid + 1]->keys[0] = node->keys[mid];
+				node->sbs[mid + 1]->values[0] = node->values[mid];
+				node->sbs[mid + 1]->sbs[0] = node->sbs[mid]->sbs[node->sbs[mid]->n];
+				node->sbs[mid + 1]->n++;
+				// change node
+				node->keys[mid] = node->sbs[mid]->keys[node->sbs[mid]->n - 1];
+				node->values[mid] = node->sbs[mid]->values[node->sbs[mid]->n - 1];
+				// change i - 1 node internal
+				node->sbs[mid]->n--;				
+				return this->deleteKey(node->sbs[i], k);
+			}
+			if (i < node->n && node->sbs[i + 1]->n >= this->minimalDegree)
+			{
+				auto mid = i;
+				node->sbs[i]->keys[node->sbs[i]->n] = node->keys[i];
+				node->sbs[i]->values[node->sbs[i]->n] = node->values[i];
+				node->sbs[i]->sbs[node->sbs[i]->n + 1] = node->sbs[i + 1]->sbs[0];
+				node->sbs[i]->n++;
+				node->keys[i] = node->sbs[i + 1]->keys[0];
+				node->values[i] = node->sbs[i + 1]->values[0];
+				for (int k = 0; k < node->sbs[i + 1]->n - 1; k++)
+				{
+					node->sbs[i + 1]->keys[k] = node->sbs[i + 1]->keys[k + 1];
+					node->sbs[i + 1]->values[k] = node->sbs[i + 1]->values[k + 1];
+					node->sbs[i + 1]->sbs[k] = node->sbs[i + 1]->sbs[k + 1];
+				}
+				node->sbs[i + 1]->sbs[node->sbs[i + 1]->n - 1] = node->sbs[i + 1]->sbs[node->sbs[i + 1]->n];
+				node->sbs[i + 1]->n--;
+				return this->deleteKey(node->sbs[i], k);
+			}
+			auto mid = 0;
+			if (i > 0)
+			{
+				mid = i - 1;
+			}
+			else if (i < node->n)
+			{
+				mid = i;
+			}
+			this->mergeNode(node, mid);
+			return this->deleteKey(node, k);
+		}
+	}
 	void printTree(B_TREE_NODE<key, value> *node)
 	{
 		std::cout << "This node contains " << node->n << " keys." << std::endl;
@@ -196,6 +344,11 @@ private:
 		}
 		std::cout << std::endl;
 	}
+	void printTree()
+	{
+		std::cout << "Print tree: " << std::endl;
+		this->printTree(this->root);
+	}
 };
 
 int main()
@@ -206,6 +359,12 @@ int main()
 	while (i > 0)
 	{
 		bt.Insert(i, i * 100);
+		i--;
+	}
+	i = 10;
+	while (i > 0)
+	{
+		bt.Delete(i);
 		i--;
 	}
 	bt.Insert(1, 111);
