@@ -175,7 +175,11 @@ private:
 			this->insertNonFullNode(node->sbs[i], k, v);
 		}
 	}
-	void mergeNode(B_TREE_NODE<key, value> *&node, int mid)
+	// v#1, void mergeNode(B_TREE_NODE<key, value> *node, int mid)
+	// v#2, void mergeNode(B_TREE_NODE<key, value> *&node, int mid)
+	// be careful! node is referenced here, that means it will be changed in this funtion, it is not a good coding style.
+	// v#3, B_TREE_NODE<key, value> *mergeNode(B_TREE_NODE<key, value> *node, int mid)
+	B_TREE_NODE<key, value> *mergeNode(B_TREE_NODE<key, value> *node, int mid)
 	{
 		auto leftChild = node->sbs[mid], rightChild = node->sbs[mid + 1];
 		auto nLeft = node->sbs[mid]->n;
@@ -215,6 +219,7 @@ private:
 			this->root = leftChild;
 			node = leftChild;
 		}
+		return node;
 	}
 	void deleteKey(B_TREE_NODE<key, value> *node, key k)
 	{
@@ -254,7 +259,7 @@ private:
 			}
 			else
 			{
-				this->mergeNode(node, i);
+				node = this->mergeNode(node, i);
 				return this->deleteKey(node, k);
 			}
 		}
@@ -317,7 +322,8 @@ private:
 			{
 				mid = i;
 			}
-			this->mergeNode(node, mid);
+			node = this->mergeNode(node, mid);
+			// fix bug, because mergeNode will destroy "node" it could be invalid memory, so change mergeNode signarture, and redo delete key on the "node".
 			return this->deleteKey(node, k);
 		}
 	}
