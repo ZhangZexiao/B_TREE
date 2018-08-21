@@ -12,11 +12,19 @@ struct B_TREE_NODE
 	B_TREE_NODE<key, value> **children;
 	bool isLeaf;
 	int n;
-	void CopyKeyValue(B_TREE_NODE<key, value> *from, int iFrom, int iTo)
+	void CopyKeyValue(B_TREE_NODE<key, value> *nodeFrom, int iFrom, int iTo)
 	{
-		assert(nullptr != from);
-		this->keys[iTo] = from->keys[iFrom];
-		this->values[iTo] = from->values[iFrom];
+		assert(nullptr != nodeFrom);
+		assert(iFrom >= 0);
+		assert(iTo >= 0);
+		this->keys[iTo] = nodeFrom->keys[iFrom];
+		this->values[iTo] = nodeFrom->values[iFrom];
+	}
+	void SetKeyValue(int iTo, key k, value v)
+	{
+		assert(iTo >= 0);
+		this->keys[iTo] = k;
+		this->values[iTo] = v;
 	}
 	B_TREE_NODE(int minimalDegree) :isLeaf(false), n(0)
 	{
@@ -87,21 +95,22 @@ private:
 		{
 			return node->values[i];
 		}
+		// key NOT in node
 		else
 		{
-			// key NOT in node
+			// no key
 			if (node->isLeaf)
 			{
-				// no key
+				
 				return value();
 			}
+			// key MAY in child node
 			else
-			{
-				// key MAY in child
+			{				
 				return this->searchKey(node->children[i], k);
 			}
 		}
-	}	
+	}
 	void splitNode(B_TREE_NODE<key, value> *node, int index)
 	{
 		std::cout << "split node" << std::endl;
@@ -109,47 +118,22 @@ private:
 		// right child node
 		auto rightChildNode = this->createNode();
 		this->copyFullLeftNodeToEmptyRightNode(leftChildNode, rightChildNode);
-		// left child node
-		leftChildNode->n = this->minKeys();
 		// parent node
-		for (int i = node->n + 1; i > index + 1; i--)
-		{
-			node->children[i] = node->children[i - 1];
-		}
-		node->children[index + 1] = rightChildNode;
-		for (int i = node->n; i > index; i--)
-		{
-			node->CopyKeyValue(node, i - 1, i);
-		}
-		node->CopyKeyValue(leftChildNode, leftChildNode->n, index);
-		node->n++;
+		this->insertKeyValueChild(node, index, leftChildNode->keys[this->minimalNumberOfKeys()], leftChildNode->values[this->minimalNumberOfKeys()], rightChildNode);
+		// left child node
+		leftChildNode->n = this->minimalNumberOfKeys();
 	}
 	void insertNonFullNode(B_TREE_NODE<key, value> *node, key k, value v)
 	{
 		std::cout << "insert non full node" << std::endl;
 		if (node->isLeaf)
 		{
-			int i = node->n - 1;
-			while (i >= 0 && node->keys[i] > k)
-			{
-				node->CopyKeyValue(node, i, i + 1);
-				std::cout << "move key " << node->keys[i] << " from position " << i << " to position " << i + 1 << std::endl;
-				i--;
-			}
-			node->keys[i + 1] = k;
-			node->values[i + 1] = v;
-			std::cout << "assign key " << k << " to position " << i + 1 << std::endl;
-			node->n++;
+			this->insertKeyValueChild(node, this->findEqualOrGreaterKeyIndex(node, k), k, v, nullptr);
 		}
 		else
 		{
-			int i = node->n - 1;
-			while (i >= 0 && node->keys[i] > k)
-			{
-				i--;
-			}
-			i++;
-			if (node->children[i]->n == this->minimalDegree * 2 - 1)
+			auto i = this->findEqualOrGreaterKeyIndex(node, k);
+			if (this->isFullNode(node->children[i]))
 			{
 				this->splitNode(node, i);
 				if (k > node->keys[i])
@@ -168,34 +152,31 @@ private:
 	{
 		auto leftChild = node->children[mid], rightChild = node->children[mid + 1];
 		auto nLeft = node->children[mid]->n;
-		// parent to left child
+		// move mid key in parent to left child
 		leftChild->CopyKeyValue(node, mid, nLeft);
 		nLeft++;
 		auto nRight = 0;
-		// right child to left child
+		// move right child to left child
 		while (nRight < rightChild->n)
 		{
 			leftChild->CopyKeyValue(rightChild, nRight, nLeft);
-			// fix bug, it should be "nLeft + 1", not "nLeft".
-			// revert fixing, it should be "nLeft".
 			leftChild->children[nLeft] = rightChild->children[nRight];
 			nRight++;
 			nLeft++;
 		}
-		// fix bug, it should be "nLeft + 1", not "nLeft".
-		// revert fixing, it should be "nLeft".
 		leftChild->children[nLeft] = rightChild->children[nRight];
 		leftChild->n += (1 + rightChild->n);
 		delete rightChild;
-		// move parent
+		// shrink parent
 		auto nParent = mid;
 		while (nParent < node->n - 1)
 		{
 			node->CopyKeyValue(node, nParent + 1, nParent);
 			node->children[nParent + 1] = node->children[nParent + 2];
+			nParent++;
 		}
 		node->n--;
-		if (node->n == 0 && !node->isLeaf)
+		if (0 == node->n && false == node->isLeaf)
 		{
 			delete this->root;
 			this->root = leftChild;
@@ -205,13 +186,8 @@ private:
 	}
 	void deleteKey(B_TREE_NODE<key, value> *node, key k)
 	{
-		std::cout << "delete key " << k << std::endl;
-		int i = 0;
-		// i stop at keys[i] = k or keys[i] > k or i == node->n
-		while (i < node->n && node->keys[i] < k)
-		{
-			i++;
-		}
+		//std::cout << "delete key " << k << std::endl;
+		auto i = this->findEqualOrGreaterKeyIndex(node, k);
 		if (i < node->n && node->keys[i] == k)
 		{
 			if (node->isLeaf)
@@ -220,6 +196,7 @@ private:
 				while (i < node->n - 1)
 				{
 					node->CopyKeyValue(node, i + 1, i);
+					i++;
 				}
 				node->n--;
 				// fix bug, it should return or will not go into following code blocks. so add "return;" and "else" before the follwing first "if".
@@ -319,11 +296,11 @@ private:
 		this->root->children[0] = tmp;
 		this->splitNode(this->root, 0);
 	}
-	int minKeys()
+	int minimalNumberOfKeys()
 	{
 		return this->minimalDegree - 1;
 	}
-	int maxKeys()
+	int maximalNumberOfKeys()
 	{
 		return this->minimalDegree * 2 - 1;
 	}
@@ -343,29 +320,46 @@ private:
 	void copyFullLeftNodeToEmptyRightNode(B_TREE_NODE<key, value> *fullLeftNode, B_TREE_NODE<key, value> *emptyRightNode)
 	{
 		assert(nullptr != fullLeftNode);
-		assert(fullLeftNode->n == this->maxKeys());
+		assert(fullLeftNode->n == this->maximalNumberOfKeys());
 		// copy isLeaf
 		emptyRightNode->isLeaf = fullLeftNode->isLeaf;
 		// copy key value
-		for (int i = 0; i < this->minKeys(); i++)
+		for (int i = 0; i < this->minimalNumberOfKeys(); i++)
 		{
 			emptyRightNode->CopyKeyValue(fullLeftNode, this->minimalDegree + i, i);
 		}
 		// copy child
 		if (false == fullLeftNode->isLeaf)
 		{
-			for (int i = 0; i <= this->minKeys(); i++)
+			for (int i = 0; i <= this->minimalNumberOfKeys(); i++)
 			{
 				emptyRightNode->children[i] = fullLeftNode->children[this->minimalDegree + i];
 			}
 		}
 		// set n
-		emptyRightNode->n = this->minKeys();
+		emptyRightNode->n = this->minimalNumberOfKeys();
+	}
+	void insertKeyValueChild(B_TREE_NODE<key, value> *node, int index, key k, value v, B_TREE_NODE<key, value> *child)
+	{
+		for (int i = node->n; i > index; i--)
+		{
+			node->CopyKeyValue(node, i - 1, i);
+		}
+		node->SetKeyValue(index, k, v);
+		if (false == node->isLeaf)
+		{
+			for (int i = node->n + 1; i > index + 1; i--)
+			{
+				node->children[i] = node->children[i - 1];
+			}
+			node->children[index + 1] = child;
+		}
+		node->n++;
 	}
 	void moveRightOneStep(B_TREE_NODE<key, value> *node)
 	{
 		assert(nullptr != node);
-		assert(node->n < this->maxKeys());
+		assert(node->n < this->maximalNumberOfKeys());
 		int n = node->n;		
 		while (n > 0)
 		{
@@ -388,7 +382,7 @@ private:
 	}	
 	void printTree(B_TREE_NODE<key, value> *node)
 	{
-		std::cout << "This node contains " << node->n << " keys." << std::endl;
+		std::cout << node << " node contains " << node->n << " keys." << std::endl;
 		std::cout << "keys: " << std::endl;
 		for (int i = 0; i < node->n; i++)
 		{
@@ -418,22 +412,33 @@ private:
 
 int main()
 {
-	B_TREE<int, int> bt(2);
+	B_TREE<int, int> bt(6);
 
-	int i = 10;
-	while (i > 0)
+	int key = 10;
+	while (key > 0)
 	{
-		bt.Insert(i, i * 100);
-		i--;
+		bt.Insert(key, key * 100);
+		key--;
 	}
-	i = 10;
-	while (i > 0)
+	key = 10;
+	while (key > 0)
 	{
-		bt.Delete(i);
-		i--;
+		bt.Delete(key);
+		key--;
 	}
-	bt.Insert(1, 111);
-	bt.Search(1);
+	//bt.Insert(1, 111);
+	//bt.Search(1);
+	key = 100;
+	while (key > 0)
+	{
+		bt.Insert(key, key * 100);
+		key--;
+	}
+	while (key < 100)
+	{
+		key++;
+		bt.Delete(key);
+	}
 	getchar();
 	return 0;
 }
