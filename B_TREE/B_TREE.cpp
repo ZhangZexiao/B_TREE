@@ -63,11 +63,16 @@ public:
 	value Search(key k)
 	{
 		std::cout << "search key " << k << std::endl;
-		return this->searchKey(this->root, k);
+		// main logic
+		auto result = this->searchKey(this->root, k);
+		// print result
+		std::cout << "result is " << result << std::endl;
+		return result;
 	}
 	void Delete(key k)
 	{
 		std::cout << "delete key " << k << std::endl;
+		// main logic
 		this->deleteKey(this->root, k);
 		// print the tree after removing.
 		this->printTree();
@@ -76,47 +81,36 @@ private:
 	value searchKey(B_TREE_NODE<key, value> *node, key k)
 	{
 		std::cout << "search key " << k << " in node " << node << std::endl;
-		int i = 0;
-		while (i < node->n && k > node->keys[i])
+		int i = this->findEqualOrGreaterKeyIndex(node, k);
+		// key in node
+		if (this->isEqualKeyIndex(node, k, i))
 		{
-			i++;
-		}
-		if (i < node->n && k == node->keys[i])
-		{
-			std::cout << "result is " << node->values[i] << std::endl;
 			return node->values[i];
-		}
-		else if (node->isLeaf)
-		{
-			return value();
 		}
 		else
 		{
-			return this->searchKey(node->children[i], k);
+			// key NOT in node
+			if (node->isLeaf)
+			{
+				// no key
+				return value();
+			}
+			else
+			{
+				// key MAY in child
+				return this->searchKey(node->children[i], k);
+			}
 		}
-	}
+	}	
 	void splitNode(B_TREE_NODE<key, value> *node, int index)
 	{
 		std::cout << "split node" << std::endl;
 		auto leftChildNode = node->children[index];
 		// right child node
 		auto rightChildNode = this->createNode();
-		// leaf!!!
-		rightChildNode->isLeaf = leftChildNode->isLeaf;
-		rightChildNode->n = this->minimalDegree - 1;
-		for (int i = 0; i < rightChildNode->n; i++)
-		{
-			rightChildNode->CopyKeyValue(leftChildNode, this->minimalDegree + i, i);
-		}
-		if (leftChildNode->isLeaf == false)
-		{
-			for (int i = 0; i <= rightChildNode->n; i++)
-			{
-				rightChildNode->children[i] = leftChildNode->children[this->minimalDegree + i];
-			}
-		}
+		this->copyFullLeftNodeToEmptyRightNode(leftChildNode, rightChildNode);
 		// left child node
-		leftChildNode->n = this->minimalDegree - 1;
+		leftChildNode->n = this->minKeys();
 		// parent node
 		for (int i = node->n + 1; i > index + 1; i--)
 		{
@@ -325,9 +319,48 @@ private:
 		this->root->children[0] = tmp;
 		this->splitNode(this->root, 0);
 	}
+	int minKeys()
+	{
+		return this->minimalDegree - 1;
+	}
 	int maxKeys()
 	{
 		return this->minimalDegree * 2 - 1;
+	}
+	int findEqualOrGreaterKeyIndex(B_TREE_NODE<key, value> *node, key k)
+	{
+		int i = 0;
+		while (i < node->n && k > node->keys[i])
+		{
+			i++;
+		}
+		return i;
+	}
+	bool isEqualKeyIndex(B_TREE_NODE<key, value> *node, key k, int index)
+	{
+		return index < node->n && k == node->keys[index];
+	}
+	void copyFullLeftNodeToEmptyRightNode(B_TREE_NODE<key, value> *fullLeftNode, B_TREE_NODE<key, value> *emptyRightNode)
+	{
+		assert(nullptr != fullLeftNode);
+		assert(fullLeftNode->n == this->maxKeys());
+		// copy isLeaf
+		emptyRightNode->isLeaf = fullLeftNode->isLeaf;
+		// copy key value
+		for (int i = 0; i < this->minKeys(); i++)
+		{
+			emptyRightNode->CopyKeyValue(fullLeftNode, this->minimalDegree + i, i);
+		}
+		// copy child
+		if (false == fullLeftNode->isLeaf)
+		{
+			for (int i = 0; i <= this->minKeys(); i++)
+			{
+				emptyRightNode->children[i] = fullLeftNode->children[this->minimalDegree + i];
+			}
+		}
+		// set n
+		emptyRightNode->n = this->minKeys();
 	}
 	void moveRightOneStep(B_TREE_NODE<key, value> *node)
 	{
