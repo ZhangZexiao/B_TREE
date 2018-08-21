@@ -41,33 +41,6 @@ class B_TREE
 {
 	B_TREE_NODE<key, value> *root;
 	int minimalDegree;
-private:
-	bool isFullNode(B_TREE_NODE<key, value> *node)
-	{
-		return node->n == this->minimalDegree * 2 - 1;
-	}
-	bool isFullRootNode()
-	{
-		return this->isFullNode(this->root);
-	}
-	auto createNode()
-	{
-		return new B_TREE_NODE<key, value>(this->minimalDegree);
-	}
-	void createRootNode()
-	{
-		this->root = this->createNode();
-		this->root->n = 0;
-	}
-	void splitFullRootNode()
-	{
-		auto tmp = this->root;
-		this->createRootNode();
-		// leaf!!!
-		this->root->isLeaf = false;
-		this->root->children[0] = tmp;
-		this->splitNode(this->root, 0);
-	}
 public:
 	B_TREE(int minimalDegree) :minimalDegree(minimalDegree)
 	{
@@ -78,11 +51,14 @@ public:
 	void Insert(key k, value v)
 	{
 		std::cout << "insert key " << k << std::endl;
+		// main logic
 		if (this->isFullRootNode())
 		{
 			this->splitFullRootNode();
 		}
 		this->insertNonFullNode(this->root, k, v);
+		// print the tree after adding.
+		this->printTree();
 	}
 	value Search(key k)
 	{
@@ -92,7 +68,9 @@ public:
 	void Delete(key k)
 	{
 		std::cout << "delete key " << k << std::endl;
-		return this->deleteKey(this->root, k);
+		this->deleteKey(this->root, k);
+		// print the tree after removing.
+		this->printTree();
 	}
 private:
 	value searchKey(B_TREE_NODE<key, value> *node, key k)
@@ -255,11 +233,13 @@ private:
 			}
 			else if (node->children[i]->n >= this->minimalDegree)
 			{
+				// lift left max key
 				node->CopyKeyValue(node->children[i], node->children[i]->n - 1, i);
 				return this->deleteKey(node->children[i], node->children[i]->keys[node->children[i]->n - 1]);
 			}
 			else if (node->children[i + 1]->n >= this->minimalDegree)
 			{
+				// lift right min key
 				node->CopyKeyValue(node->children[i + 1], 0, i);
 				return this->deleteKey(node->children[i + 1], node->children[i + 1]->keys[0]);
 			}
@@ -275,42 +255,32 @@ private:
 		}
 		else
 		{
-			// left node
+			// borrow 1 key from left node
 			if (i > 0 && node->children[i - 1]->n >= this->minimalDegree)
 			{
 				auto mid = i - 1;
-				// change i node
-				int nRight = node->children[mid + 1]->n;
-				while (nRight > 0)
-				{
-					node->children[mid + 1]->CopyKeyValue(node->children[mid + 1], nRight - 1, nRight);
-					node->children[mid + 1]->children[nRight + 1] = node->children[mid + 1]->children[nRight];
-					nRight--;
-				}
-				node->children[mid + 1]->children[nRight + 1] = node->children[mid + 1]->children[nRight];
+				// add 1 key to right node
+				this->moveRightOneStep(node->children[mid + 1]);
 				node->children[mid + 1]->CopyKeyValue(node, mid, 0);
 				node->children[mid + 1]->children[0] = node->children[mid]->children[node->children[mid]->n];
 				node->children[mid + 1]->n++;
-				// change node
+				// change parent node
 				node->CopyKeyValue(node->children[mid], node->children[mid]->n - 1, mid);
-				// change i - 1 node internal
+				// delete 1 key from left node
 				node->children[mid]->n--;
 				return this->deleteKey(node->children[i], k);
 			}
+			// borrow 1 key from right node
 			if (i < node->n && node->children[i + 1]->n >= this->minimalDegree)
 			{
-				auto mid = i;
+				// add 1 key to left node
 				node->children[i]->CopyKeyValue(node, i, node->children[i]->n);
 				node->children[i]->children[node->children[i]->n + 1] = node->children[i + 1]->children[0];
 				node->children[i]->n++;
-				node->keys[i] = node->children[i + 1]->keys[0];
-				node->values[i] = node->children[i + 1]->values[0];
-				for (int k = 0; k < node->children[i + 1]->n - 1; k++)
-				{
-					node->children[i + 1]->CopyKeyValue(node->children[i + 1], k + 1, k);
-					node->children[i + 1]->children[k] = node->children[i + 1]->children[k + 1];
-				}
-				node->children[i + 1]->children[node->children[i + 1]->n - 1] = node->children[i + 1]->children[node->children[i + 1]->n];
+				// change parent node
+				node->CopyKeyValue(node->children[i + 1], 0, i);
+				// delete 1 key from right node
+				this->moveLeftOneStep(node->children[i + 1]);
 				node->children[i + 1]->n--;
 				return this->deleteKey(node->children[i], k);
 			}
@@ -328,6 +298,61 @@ private:
 			return this->deleteKey(node, k);
 		}
 	}
+private:
+	bool isFullNode(B_TREE_NODE<key, value> *node)
+	{
+		return node->n == this->minimalDegree * 2 - 1;
+	}
+	bool isFullRootNode()
+	{
+		return this->isFullNode(this->root);
+	}
+	auto createNode()
+	{
+		return new B_TREE_NODE<key, value>(this->minimalDegree);
+	}
+	void createRootNode()
+	{
+		this->root = this->createNode();
+		this->root->n = 0;
+	}
+	void splitFullRootNode()
+	{
+		auto tmp = this->root;
+		this->createRootNode();
+		// leaf!!!
+		this->root->isLeaf = false;
+		this->root->children[0] = tmp;
+		this->splitNode(this->root, 0);
+	}
+	int maxKeys()
+	{
+		return this->minimalDegree * 2 - 1;
+	}
+	void moveRightOneStep(B_TREE_NODE<key, value> *node)
+	{
+		assert(nullptr != node);
+		assert(node->n < this->maxKeys());
+		int n = node->n;		
+		while (n > 0)
+		{
+			node->CopyKeyValue(node, n - 1, n);
+			node->children[n + 1] = node->children[n];
+			n--;
+		}
+		node->children[n + 1] = node->children[n];
+	}
+	void moveLeftOneStep(B_TREE_NODE<key, value> *node)
+	{
+		assert(nullptr != node);
+		assert(node->n > 0);
+		for (int k = 0; k < node->n - 1; k++)
+		{
+			node->CopyKeyValue(node, k + 1, k);
+			node->children[k] = node->children[k + 1];
+		}
+		node->children[node->n - 1] = node->children[node->n];
+	}	
 	void printTree(B_TREE_NODE<key, value> *node)
 	{
 		std::cout << "This node contains " << node->n << " keys." << std::endl;
