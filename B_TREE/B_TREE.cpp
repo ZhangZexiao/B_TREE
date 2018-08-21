@@ -2,7 +2,7 @@
 //
 // 函数注释
 // 类单元测试
-// 
+// 图形显示树
 #include "stdafx.h"
 #include <iostream>
 #include <cassert>
@@ -129,49 +129,51 @@ private:
 			}
 		}
 	}
-	void splitNode(TYPE_b_tree_node_pointer node, int index)
+	void splitNode(TYPE_b_tree_node_pointer parentNode, TYPE_index childIndex)
 	{
 		std::cout << "split node" << std::endl;
-		auto leftChildNode = node->children[index];
 		// right child node
 		auto rightChildNode = this->createNode();
+		auto leftChildNode = parentNode->children[childIndex];
 		this->copyFullLeftNodeToEmptyRightNode(leftChildNode, rightChildNode);
-		// parent node
-		this->insertKeyValueChild(node, index, leftChildNode->keys[this->minimalNumberOfKeys()], leftChildNode->values[this->minimalNumberOfKeys()], rightChildNode);
-		// left child node
+		// parent node, enlarge parent node by inserting one "key value child"
+		auto leftChildMiddleKey = leftChildNode->keys[this->minimalNumberOfKeys()];
+		auto leftChildMiddleValue = leftChildNode->values[this->minimalNumberOfKeys()];
+		this->insertKeyValueChild(parentNode, childIndex, leftChildMiddleKey, leftChildMiddleValue, rightChildNode);
+		// left child node, shrink left child node
 		leftChildNode->numberOfKeys = this->minimalNumberOfKeys();
 	}
-	void insertNonFullNode(TYPE_b_tree_node_pointer node, TYPE_key k, TYPE_value v)
+	void insertNonFullNode(TYPE_b_tree_node_pointer node, TYPE_key key, TYPE_value value)
 	{
 		std::cout << "insert non full node" << std::endl;
 		if (node->isLeaf)
 		{
-			this->insertKeyValueChild(node, this->findEqualOrGreaterKeyIndex(node, k), k, v, nullptr);
+			this->insertKeyValueChild(node, this->findEqualOrGreaterKeyIndex(node, key), key, value, nullptr);
 		}
 		else
 		{
-			auto i = this->findEqualOrGreaterKeyIndex(node, k);
-			if (this->isFullNode(node->children[i]))
+			auto middleIndex = this->findEqualOrGreaterKeyIndex(node, key);
+			if (this->isFullNode(node->children[middleIndex]))
 			{
-				this->splitNode(node, i);
-				if (k > node->keys[i])
+				this->splitNode(node, middleIndex);
+				if (key > node->keys[middleIndex])
 				{
-					i++;
+					middleIndex++;
 				}
 			}
-			this->insertNonFullNode(node->children[i], k, v);
+			this->insertNonFullNode(node->children[middleIndex], key, value);
 		}
 	}
-	// v#1, void mergeNode(B_TREE_NODE<key, value> *node, int mid)
-	// v#2, void mergeNode(B_TREE_NODE<key, value> *&node, int mid)
+	// v#1, void mergeNode(B_TREE_NODE<key, value> *node, TYPE_index mid)
+	// v#2, void mergeNode(B_TREE_NODE<key, value> *&node, TYPE_index mid)
 	// be careful! node is referenced here, that means it will be changed in this funtion, it is not a good coding style.
-	// v#3, B_TREE_NODE<key, value> *mergeNode(B_TREE_NODE<key, value> *node, int mid)
-	TYPE_b_tree_node_pointer mergeNode(TYPE_b_tree_node_pointer node, int mid)
+	// v#3, B_TREE_NODE<key, value> *mergeNode(B_TREE_NODE<key, value> *node, TYPE_index mid)
+	TYPE_b_tree_node_pointer mergeNode(TYPE_b_tree_node_pointer node, TYPE_index middleIndex)
 	{
-		auto leftChild = node->children[mid], rightChild = node->children[mid + 1];
-		auto nLeft = node->children[mid]->numberOfKeys;
+		auto leftChild = node->children[middleIndex], rightChild = node->children[middleIndex + 1];
+		auto nLeft = node->children[middleIndex]->numberOfKeys;
 		// move mid key in parent to left child
-		leftChild->CopyKeyValue(node, mid, nLeft);
+		leftChild->CopyKeyValue(node, middleIndex, nLeft);
 		nLeft++;
 		auto nRight = 0;
 		// move right child to left child
@@ -186,7 +188,7 @@ private:
 		leftChild->numberOfKeys += (1 + rightChild->numberOfKeys);
 		delete rightChild;
 		// shrink parent
-		auto nParent = mid;
+		auto nParent = middleIndex;
 		while (nParent < node->numberOfKeys - 1)
 		{
 			node->CopyKeyValue(node, nParent + 1, nParent);
@@ -202,52 +204,52 @@ private:
 		}
 		return node;
 	}
-	void deleteKey(TYPE_b_tree_node_pointer node, TYPE_key k)
+	void deleteKey(TYPE_b_tree_node_pointer node, TYPE_key key)
 	{
 		//std::cout << "delete key " << k << std::endl;
-		auto i = this->findEqualOrGreaterKeyIndex(node, k);
-		if (i < node->numberOfKeys && node->keys[i] == k)
+		auto middleIndex = this->findEqualOrGreaterKeyIndex(node, key);		
+		if (this->isEqualKeyIndex(node, key, middleIndex))
 		{
 			if (node->isLeaf)
 			{
 				// max i = n - 2, so the last assignment is node->keys[n - 2] = node->keys[n - 1];
-				while (i < node->numberOfKeys - 1)
+				while (middleIndex < node->numberOfKeys - 1)
 				{
-					node->CopyKeyValue(node, i + 1, i);
-					i++;
+					node->CopyKeyValue(node, middleIndex + 1, middleIndex);
+					middleIndex++;
 				}
 				node->numberOfKeys--;
 				// fix bug, it should return or will not go into following code blocks. so add "return;" and "else" before the follwing first "if".
 				return;
 			}
-			else if (node->children[i]->numberOfKeys >= this->minimalDegree)
+			else if (node->children[middleIndex]->numberOfKeys >= this->minimalDegree)
 			{
 				// lift left max key
-				node->CopyKeyValue(node->children[i], node->children[i]->numberOfKeys - 1, i);
-				return this->deleteKey(node->children[i], node->children[i]->keys[node->children[i]->numberOfKeys - 1]);
+				node->CopyKeyValue(node->children[middleIndex], node->children[middleIndex]->numberOfKeys - 1, middleIndex);
+				return this->deleteKey(node->children[middleIndex], node->children[middleIndex]->keys[node->children[middleIndex]->numberOfKeys - 1]);
 			}
-			else if (node->children[i + 1]->numberOfKeys >= this->minimalDegree)
+			else if (node->children[middleIndex + 1]->numberOfKeys >= this->minimalDegree)
 			{
 				// lift right min key
-				node->CopyKeyValue(node->children[i + 1], 0, i);
-				return this->deleteKey(node->children[i + 1], node->children[i + 1]->keys[0]);
+				node->CopyKeyValue(node->children[middleIndex + 1], 0, middleIndex);
+				return this->deleteKey(node->children[middleIndex + 1], node->children[middleIndex + 1]->keys[0]);
 			}
 			else
 			{
-				node = this->mergeNode(node, i);
-				return this->deleteKey(node, k);
+				node = this->mergeNode(node, middleIndex);
+				return this->deleteKey(node, key);
 			}
 		}
-		else if (node->children[i]->numberOfKeys >= this->minimalDegree)
+		else if (node->children[middleIndex]->numberOfKeys >= this->minimalDegree)
 		{
-			return this->deleteKey(node->children[i], k);
+			return this->deleteKey(node->children[middleIndex], key);
 		}
 		else
 		{
 			// borrow 1 key from left node
-			if (i > 0 && node->children[i - 1]->numberOfKeys >= this->minimalDegree)
+			if (middleIndex > 0 && node->children[middleIndex - 1]->numberOfKeys >= this->minimalDegree)
 			{
-				auto mid = i - 1;
+				auto mid = middleIndex - 1;
 				// add 1 key to right node
 				this->moveRightOneStep(node->children[mid + 1]);
 				node->children[mid + 1]->CopyKeyValue(node, mid, 0);
@@ -257,34 +259,34 @@ private:
 				node->CopyKeyValue(node->children[mid], node->children[mid]->numberOfKeys - 1, mid);
 				// delete 1 key from left node
 				node->children[mid]->numberOfKeys--;
-				return this->deleteKey(node->children[i], k);
+				return this->deleteKey(node->children[middleIndex], key);
 			}
 			// borrow 1 key from right node
-			if (i < node->numberOfKeys && node->children[i + 1]->numberOfKeys >= this->minimalDegree)
+			if (middleIndex < node->numberOfKeys && node->children[middleIndex + 1]->numberOfKeys >= this->minimalDegree)
 			{
 				// add 1 key to left node
-				node->children[i]->CopyKeyValue(node, i, node->children[i]->numberOfKeys);
-				node->children[i]->children[node->children[i]->numberOfKeys + 1] = node->children[i + 1]->children[0];
-				node->children[i]->numberOfKeys++;
+				node->children[middleIndex]->CopyKeyValue(node, middleIndex, node->children[middleIndex]->numberOfKeys);
+				node->children[middleIndex]->children[node->children[middleIndex]->numberOfKeys + 1] = node->children[middleIndex + 1]->children[0];
+				node->children[middleIndex]->numberOfKeys++;
 				// change parent node
-				node->CopyKeyValue(node->children[i + 1], 0, i);
+				node->CopyKeyValue(node->children[middleIndex + 1], 0, middleIndex);
 				// delete 1 key from right node
-				this->moveLeftOneStep(node->children[i + 1]);
-				node->children[i + 1]->numberOfKeys--;
-				return this->deleteKey(node->children[i], k);
+				this->moveLeftOneStep(node->children[middleIndex + 1]);
+				node->children[middleIndex + 1]->numberOfKeys--;
+				return this->deleteKey(node->children[middleIndex], key);
 			}
-			auto mid = 0;
-			if (i > 0)
+			auto mid = middleIndex;
+			if (middleIndex > 0)
 			{
-				mid = i - 1;
+				mid = middleIndex - 1;
 			}
-			else if (i < node->numberOfKeys)
+			else if (middleIndex < node->numberOfKeys)
 			{
-				mid = i;
+				mid = middleIndex;
 			}
 			node = this->mergeNode(node, mid);
 			// fix bug, because mergeNode will destroy "node" it could be invalid memory, so change mergeNode signarture, and redo delete key on the "node".
-			return this->deleteKey(node, k);
+			return this->deleteKey(node, key);
 		}
 	}
 private:
@@ -314,26 +316,26 @@ private:
 		this->root->children[0] = tmp;
 		this->splitNode(this->root, 0);
 	}
-	int minimalNumberOfKeys()
+	TYPE_index minimalNumberOfKeys()
 	{
 		return this->minimalDegree - 1;
 	}
-	int maximalNumberOfKeys()
+	TYPE_index maximalNumberOfKeys()
 	{
 		return this->minimalDegree * 2 - 1;
 	}
-	int findEqualOrGreaterKeyIndex(TYPE_b_tree_node_pointer node, TYPE_key k)
+	TYPE_index findEqualOrGreaterKeyIndex(TYPE_b_tree_node_pointer node, TYPE_key key)
 	{
-		int i = 0;
-		while (i < node->numberOfKeys && k > node->keys[i])
+		TYPE_index middleIndex = 0;
+		while (middleIndex < node->numberOfKeys && key > node->keys[middleIndex])
 		{
-			i++;
+			middleIndex++;
 		}
-		return i;
+		return middleIndex;
 	}
-	bool isEqualKeyIndex(TYPE_b_tree_node_pointer node, TYPE_key k, int index)
+	bool isEqualKeyIndex(TYPE_b_tree_node_pointer node, TYPE_key key, TYPE_index index)
 	{
-		return index < node->numberOfKeys && k == node->keys[index];
+		return index < node->numberOfKeys && key == node->keys[index];
 	}
 	void copyFullLeftNodeToEmptyRightNode(TYPE_b_tree_node_pointer fullLeftNode, TYPE_b_tree_node_pointer emptyRightNode)
 	{
@@ -342,31 +344,30 @@ private:
 		// copy isLeaf
 		emptyRightNode->isLeaf = fullLeftNode->isLeaf;
 		// copy key value
-		for (int i = 0; i < this->minimalNumberOfKeys(); i++)
+		for (TYPE_index i = 0; i < this->minimalNumberOfKeys(); i++)
 		{
 			emptyRightNode->CopyKeyValue(fullLeftNode, this->minimalDegree + i, i);
 		}
 		// copy child
 		if (false == fullLeftNode->isLeaf)
 		{
-			for (int i = 0; i <= this->minimalNumberOfKeys(); i++)
+			for (TYPE_index i = 0; i <= this->minimalNumberOfKeys(); i++)
 			{
 				emptyRightNode->children[i] = fullLeftNode->children[this->minimalDegree + i];
 			}
 		}
-		// set n
 		emptyRightNode->numberOfKeys = this->minimalNumberOfKeys();
 	}
-	void insertKeyValueChild(TYPE_b_tree_node_pointer node, int index, TYPE_key k, TYPE_value v, TYPE_b_tree_node_pointer child)
+	void insertKeyValueChild(TYPE_b_tree_node_pointer node, TYPE_index index, TYPE_key key, TYPE_value value, TYPE_b_tree_node_pointer child)
 	{
-		for (int i = node->numberOfKeys; i > index; i--)
+		for (TYPE_index i = node->numberOfKeys; i > index; i--)
 		{
 			node->CopyKeyValue(node, i - 1, i);
 		}
-		node->SetKeyValue(index, k, v);
+		node->SetKeyValue(index, key, value);
 		if (false == node->isLeaf)
 		{
-			for (int i = node->numberOfKeys + 1; i > index + 1; i--)
+			for (TYPE_index i = node->numberOfKeys + 1; i > index + 1; i--)
 			{
 				node->children[i] = node->children[i - 1];
 			}
@@ -378,7 +379,7 @@ private:
 	{
 		assert(nullptr != node);
 		assert(node->numberOfKeys < this->maximalNumberOfKeys());
-		int numberOfKeys = node->numberOfKeys;		
+		TYPE_index numberOfKeys = node->numberOfKeys;		
 		while (numberOfKeys > 0)
 		{
 			node->CopyKeyValue(node, numberOfKeys - 1, numberOfKeys);
@@ -391,7 +392,7 @@ private:
 	{
 		assert(nullptr != node);
 		assert(node->numberOfKeys > 0);
-		for (int k = 0; k < node->numberOfKeys - 1; k++)
+		for (TYPE_index k = 0; k < node->numberOfKeys - 1; k++)
 		{
 			node->CopyKeyValue(node, k + 1, k);
 			node->children[k] = node->children[k + 1];
@@ -401,12 +402,15 @@ private:
 	void printTree(TYPE_b_tree_node_pointer node)
 	{
 		std::cout << node << " node contains " << node->numberOfKeys << " keys." << std::endl;
-		std::cout << "keys: " << std::endl;
-		for (int i = 0; i < node->numberOfKeys; i++)
+		if (node->numberOfKeys > 0)
 		{
-			std::cout << "(" << node->keys[i] << ", " << node->values[i] << ") ";
+			std::cout << "keys: " << std::endl;
+			for (TYPE_index i = 0; i < node->numberOfKeys; i++)
+			{
+				std::cout << "(" << node->keys[i] << ", " << node->values[i] << ") ";
+			}
+			std::cout << std::endl;
 		}
-		std::cout << std::endl;
 		if (node->isLeaf)
 		{
 			std::cout << "it is leaf node." << std::endl;
@@ -414,23 +418,24 @@ private:
 		else
 		{
 			std::cout << "it is internal node. it contains following childrens: " << std::endl;
-			for (int i = 0; i <= node->numberOfKeys; i++)
+			for (TYPE_index i = 0; i <= node->numberOfKeys; i++)
 			{
 				printTree(node->children[i]);
 			}
 		}
-		std::cout << std::endl;
+		//std::cout << std::endl;
 	}
 	void printTree()
 	{
 		std::cout << "Print tree: " << std::endl;
 		this->printTree(this->root);
+		std::cout << std::endl;
 	}
 };
 
 int main()
 {
-	B_TREE<int, int, int> bt(6);
+	B_TREE<unsigned long long, unsigned long long, unsigned long long> bt(6);
 
 	int TYPE_key = 10;
 	while (TYPE_key > 0)
@@ -446,13 +451,13 @@ int main()
 	}
 	//bt.Insert(1, 111);
 	//bt.Search(1);
-	TYPE_key = 100;
+	TYPE_key = 30;
 	while (TYPE_key > 0)
 	{
 		bt.Insert(TYPE_key, TYPE_key * 100);
 		TYPE_key--;
 	}
-	while (TYPE_key < 100)
+	while (TYPE_key < 30)
 	{
 		TYPE_key++;
 		bt.Delete(TYPE_key);
