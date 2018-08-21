@@ -149,6 +149,8 @@
   <ItemGroup>
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="TYPE_b_tree.h" />
+    <ClInclude Include="TYPE_b_tree_node.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="B_TREE.cpp" />
